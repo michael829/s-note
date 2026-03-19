@@ -153,4 +153,36 @@ impl Database {
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(notes)
     }
+
+    pub fn import_data(&self, groups: Vec<Group>, notes: Vec<Note>) -> Result<(), rusqlite::Error> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        // Clear existing data
+        tx.execute("DELETE FROM notes", [])?;
+        tx.execute("DELETE FROM groups", [])?;
+
+        // Map old group IDs to new group IDs
+        let mut group_id_map = std::collections::HashMap::new();
+
+        for group in groups {
+            tx.execute(
+                "INSERT INTO groups (name, created_at, updated_at) VALUES (?1, ?2, ?3)",
+                params![group.name, group.created_at, group.updated_at],
+            )?;
+            let new_id = tx.last_insert_rowid();
+            group_id_map.insert(group.id, new_id);
+        }
+
+        for note in notes {
+            let new_group_id = note.group_id.and_then(|old_id| group_id_map.get(&old_id).copied());
+            tx.execute(
+                "INSERT INTO notes (name, content, group_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![note.name, note.content, new_group_id, note.created_at, note.updated_at],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
 }

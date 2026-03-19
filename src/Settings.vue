@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useApi } from "./composables/useApi";
-import { save } from "@tauri-apps/plugin-dialog";
+import { useStore } from "./composables/useStore";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 const api = useApi();
+const store = useStore();
 
 const version = ref("");
 const autoStart = ref(false);
 const exporting = ref(false);
 const exportSuccess = ref(false);
+const importing = ref(false);
+const importSuccess = ref(false);
 
 onMounted(async () => {
   version.value = await api.getAppVersion();
@@ -51,6 +55,29 @@ async function handleExport() {
     console.error("Export failed:", e);
   } finally {
     exporting.value = false;
+  }
+}
+
+async function handleImport() {
+  try {
+    const filePath = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    
+    if (filePath) {
+      importing.value = true;
+      const content = await api.readFile(filePath as string);
+      await api.importData(content);
+      await store.loadData();
+      importSuccess.value = true;
+      setTimeout(() => { importSuccess.value = false; }, 2000);
+    }
+  } catch (e) {
+    console.error("Import failed:", e);
+    alert("导入失败，请确保文件格式正确");
+  } finally {
+    importing.value = false;
   }
 }
 </script>
@@ -110,6 +137,30 @@ async function handleExport() {
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               导出
+            </template>
+          </button>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">导入数据</span>
+            <span class="setting-desc">从 JSON 文件恢复笔记和分组</span>
+          </div>
+          <button class="btn-action btn-secondary" @click="handleImport" :disabled="importing">
+            <template v-if="importSuccess">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              已导入
+            </template>
+            <template v-else-if="importing">导入中...</template>
+            <template v-else>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 14 12 9 7 14" />
+                <line x1="12" y1="9" x2="12" y2="21" />
+              </svg>
+              导入
             </template>
           </button>
         </div>

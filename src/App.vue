@@ -11,7 +11,8 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 const store = useStore();
 
@@ -24,6 +25,10 @@ const editorOpen = ref(false);
 const toastVisible = ref(false);
 const toastMessage = ref("");
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+const autoStart = ref(false);
+const exporting = ref(false);
+const importing = ref(false);
 
 function showToast(msg: string) {
   toastMessage.value = msg;
@@ -38,6 +43,12 @@ const totalCount = computed(() => store.notes.value.length);
 
 onMounted(async () => {
   await store.loadData();
+  
+  try {
+    autoStart.value = await isEnabled();
+  } catch (_) {
+    autoStart.value = false;
+  }
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -55,6 +66,63 @@ onMounted(async () => {
   });
 });
 
+async function toggleAutoStart() {
+  try {
+    if (autoStart.value) {
+      await disable();
+      autoStart.value = false;
+      showToast("已关闭开机自启");
+    } else {
+      await enable();
+      autoStart.value = true;
+      showToast("已开启开机自启");
+    }
+  } catch (e) {
+    console.error("Failed to toggle autostart:", e);
+  }
+}
+
+async function handleExport() {
+  try {
+    exporting.value = true;
+    const data = await invoke<string>("export_data");
+    const filePath = await save({
+      defaultPath: `simple-note-export.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (filePath) {
+      await invoke("save_to_file", { path: filePath, content: data });
+      showToast("导出成功");
+    }
+  } catch (e) {
+    console.error("Export failed:", e);
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function handleImport() {
+  try {
+    const filePath = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    
+    if (filePath) {
+      importing.value = true;
+      const content = await invoke<string>("read_file", { path: filePath });
+      await invoke("import_data", { jsonData: content });
+      await store.loadData();
+      showToast("导入成功");
+    }
+  } catch (e) {
+    console.error("Import failed:", e);
+    showToast("导入失败");
+  } finally {
+    importing.value = false;
+  }
+}
+
 async function handleSave(name: string, content: string, groupId: number | null) {
   await store.addNote(name, content, groupId);
   showToast("已保存");
@@ -67,6 +135,8 @@ async function handleCreateGroup(name: string) {
 function handleCopy(note: Note) {
   store.copyContent(note.content);
   showToast("已复制到剪贴板");
+  // Hide window after copy
+  getCurrentWindow().hide();
 }
 
 function handleDeleteNote(note: Note) {
@@ -140,22 +210,6 @@ async function handleExportData() {
   }
 }
 
-function openSettings() {
-  const settings = new WebviewWindow("settings", {
-    url: "settings.html",
-    title: "设置",
-    width: 380,
-    height: 320,
-    resizable: false,
-    center: true,
-    alwaysOnTop: true,
-  });
-
-  settings.once("tauri://destroyed", () => {
-    // noop
-  });
-}
-
 function handleQuit() {
   invoke("quit_app");
 }
@@ -221,7 +275,7 @@ function handleQuit() {
         </template>
       </div>
 
-      <!-- Status bar (always visible for quit button) -->
+      <!-- Status bar -->
       <div class="status-bar">
         <div class="status-info">
           <template v-if="totalCount > 0">
@@ -230,20 +284,38 @@ function handleQuit() {
             <span v-if="store.groups.value.length > 0">{{ store.groups.value.length }} 个分组</span>
           </template>
         </div>
-        <button class="settings-btn" @click="openSettings" title="设置" aria-label="设置">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
-        <button class="quit-btn" @click="handleQuit" title="退出 Simple Note" aria-label="退出">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          退出
-        </button>
+        <div class="status-actions">
+          <button class="action-btn" :class="{ 'action-btn--active': autoStart }" @click="toggleAutoStart" title="开机启动" aria-label="开机启动">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            自启
+          </button>
+          <button class="action-btn" @click="handleImport" :disabled="importing" title="导入数据" aria-label="导入">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 14 12 9 7 14" />
+              <line x1="12" y1="9" x2="12" y2="21" />
+            </svg>
+            导入
+          </button>
+          <button class="action-btn" @click="handleExport" :disabled="exporting" title="导出数据" aria-label="导出">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            导出
+          </button>
+          <button class="action-btn" @click="handleQuit" title="退出 Simple Note" aria-label="退出">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            退出
+          </button>
+        </div>
       </div>
 
     <!-- Block interaction when editor is open -->
@@ -467,25 +539,13 @@ html, body, #app {
   opacity: 0.5;
 }
 
-.settings-btn {
+.status-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 2px 4px;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  gap: 4px;
 }
 
-.settings-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-secondary);
-}
-
-.quit-btn {
+.action-btn {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -497,10 +557,30 @@ html, body, #app {
   font-family: var(--font-sans);
   font-size: var(--font-size-2xs);
   padding: 2px 4px;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
-.quit-btn:hover {
+.action-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn--active {
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.action-btn--active:hover {
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: var(--color-success) !important;
+}
+
+.action-btn--danger:hover {
   background: var(--color-danger-subtle);
   color: var(--color-danger);
 }

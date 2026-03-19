@@ -33,7 +33,9 @@ export function useApi() {
     copyToClipboard: (content: string) => invoke<void>("copy_to_clipboard", { content }),
 
     exportData: () => invoke<string>("export_data"),
+    importData: (jsonData: string) => invoke<void>("import_data", { jsonData }),
     saveToFile: (path: string, content: string) => invoke<void>("save_to_file", { path, content }),
+    readFile: (path: string) => invoke<string>("read_file", { path }),
     getAppVersion: () => invoke<string>("get_app_version"),
   };
 }

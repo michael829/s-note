@@ -5,8 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{
-    AppHandle, Emitter, Manager,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    AppHandle, Manager,
     tray::TrayIconBuilder,
     WebviewUrl, WebviewWindowBuilder,
 };
@@ -69,25 +68,6 @@ fn create_main_window(app: &AppHandle) {
             }
         });
     }
-}
-
-fn open_new_note_window(app: &AppHandle) {
-    // Show main panel first
-    toggle_panel(app);
-
-    // Open editor in create mode
-    let label = format!("editor-new-{}", now_millis());
-    let _ = WebviewWindowBuilder::new(
-        app,
-        &label,
-        WebviewUrl::App("editor.html?type=note&mode=create".into()),
-    )
-    .title("新建笔记")
-    .inner_size(420.0, 380.0)
-    .resizable(false)
-    .center()
-    .always_on_top(true)
-    .build();
 }
 
 fn position_window_near_tray(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
@@ -153,23 +133,16 @@ pub fn run() {
                 .expect("Failed to initialize database");
             app.manage(database);
 
-            // Build tray right-click menu
-            let menu = Menu::with_items(app, &[
-                &MenuItem::with_id(app, "new_note", "新建笔记", true, None::<&str>)?,
-                &MenuItem::with_id(app, "export_data", "导出数据", true, None::<&str>)?,
-                &PredefinedMenuItem::separator(app)?,
-                &MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?,
-            ])?;
-
-            // Create tray icon with menu
+            // Create tray icon
             let app_handle = app.handle().clone();
-            let app_handle_menu = app.handle().clone();
+            
+            // Embed the 32x32 icon directly into the binary for reliability
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
+
             TrayIconBuilder::with_id("main-tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .tooltip("Simple Note")
-                .menu(&menu)
-                .show_menu_on_left_click(false)
                 .on_tray_icon_event(move |_tray, event| {
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
@@ -178,21 +151,6 @@ pub fn run() {
                     } = event
                     {
                         toggle_panel(&app_handle);
-                    }
-                })
-                .on_menu_event(move |app, event| {
-                    match event.id.as_ref() {
-                        "new_note" => {
-                            open_new_note_window(&app_handle_menu);
-                        }
-                        "export_data" => {
-                            // Emit event to frontend to handle export
-                            let _ = app.emit("tray-export-data", ());
-                        }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
                     }
                 })
                 .build(app)?;
@@ -219,10 +177,11 @@ pub fn run() {
             commands::get_all_notes,
             commands::copy_to_clipboard,
             commands::export_data,
+            commands::import_data,
             commands::save_to_file,
+            commands::read_file,
             commands::get_app_version,
             commands::quit_app,
-        ])
-        .run(tauri::generate_context!())
+            ])        .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

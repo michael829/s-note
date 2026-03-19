@@ -1,12 +1,18 @@
 use tauri::{AppHandle, State};
 use crate::db::{Database, Group, Note};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ExportData {
     pub groups: Vec<Group>,
     pub notes: Vec<Note>,
     pub exported_at: String,
+}
+
+#[tauri::command]
+pub fn import_data(db: State<'_, Database>, json_data: String) -> Result<(), String> {
+    let data: ExportData = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
+    db.import_data(data.groups, data.notes).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -71,6 +77,11 @@ pub fn export_data(db: State<'_, Database>) -> Result<String, String> {
 #[tauri::command]
 pub fn save_to_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
