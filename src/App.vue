@@ -43,6 +43,9 @@ const totalCount = computed(() => store.notes.value.length);
 
 onMounted(async () => {
   await store.loadData();
+
+  await getCurrentWindow().setFocus();
+  // 尝试让窗口获取焦点. 否则打开窗口可能需要点第二次才会有效(当然这个代码好像不是每次都有效, 不会tauri暂时就先这样了)
   
   try {
     autoStart.value = await isEnabled();
@@ -87,7 +90,7 @@ async function handleExport() {
     exporting.value = true;
     const data = await invoke<string>("export_data");
     const filePath = await save({
-      defaultPath: `simple-note-export.json`,
+      defaultPath: `s-note-export.json`,
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (filePath) {
@@ -198,7 +201,7 @@ async function handleExportData() {
   try {
     const data = await invoke<string>("export_data");
     const filePath = await save({
-      defaultPath: "simple-note-export.json",
+      defaultPath: "s-note-export.json",
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (filePath) {
@@ -287,9 +290,10 @@ function handleQuit() {
         <div class="status-actions">
           <button class="action-btn" :class="{ 'action-btn--active': autoStart }" @click="toggleAutoStart" title="开机启动" aria-label="开机启动">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              <circle cx="12" cy="12" r="10" fill="none" />
+              <circle cx="12" cy="12" r="6" fill="currentColor" stroke="none" v-if="autoStart" />
             </svg>
-            自启
+            开机启动
           </button>
           <button class="action-btn" @click="handleImport" :disabled="importing" title="导入数据" aria-label="导入">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -307,7 +311,7 @@ function handleQuit() {
             </svg>
             导出
           </button>
-          <button class="action-btn" @click="handleQuit" title="退出 Simple Note" aria-label="退出">
+          <button class="action-btn" @click="handleQuit" title="退出 S-Note" aria-label="退出">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
@@ -552,7 +556,7 @@ html, body, #app {
   border: none;
   border-radius: var(--radius-xs);
   background: none;
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--font-size-2xs);

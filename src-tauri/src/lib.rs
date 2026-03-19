@@ -27,6 +27,7 @@ fn toggle_panel(app: &AppHandle) {
             LAST_SHOW_TIME.store(now_millis(), Ordering::SeqCst);
             let _ = window.show();
             let _ = window.set_focus();
+            let _ = position_window_near_tray(app, &window);
         }
     } else {
         create_main_window(app);
@@ -36,7 +37,7 @@ fn toggle_panel(app: &AppHandle) {
 fn create_main_window(app: &AppHandle) {
     LAST_SHOW_TIME.store(now_millis(), Ordering::SeqCst);
     let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-        .title("Simple Note")
+        .title("S-Note")
         .inner_size(360.0, 500.0)
         .resizable(false)
         .decorations(false)
@@ -128,7 +129,7 @@ pub fn run() {
             // Initialize database
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
-            let db_path = app_dir.join("simple-note.db");
+            let db_path = app_dir.join("s-note.db");
             let database = db::Database::new(db_path.to_str().unwrap())
                 .expect("Failed to initialize database");
             app.manage(database);
@@ -141,8 +142,8 @@ pub fn run() {
 
             TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
-                .icon_as_template(true)
-                .tooltip("Simple Note")
+                .icon_as_template(false)
+                .tooltip("S-Note")
                 .on_tray_icon_event(move |_tray, event| {
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,

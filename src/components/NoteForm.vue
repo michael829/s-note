@@ -87,7 +87,7 @@ function cancelNewGroup() {
       <div class="group-select-wrap">
         <span class="group-dot" />
         <select class="group-native-select" @change="onGroupChange">
-          <option value="">无分组</option>
+          <option value="">默认分组</option>
           <option v-for="group in groups" :key="group.id" :value="group.id">
             {{ group.name }}
           </option>

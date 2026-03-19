@@ -43,7 +43,7 @@ async function handleExport() {
     exporting.value = true;
     const data = await api.exportData();
     const filePath = await save({
-      defaultPath: `simple-note-export.json`,
+      defaultPath: `s-note-export.json`,
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (filePath) {
@@ -94,7 +94,7 @@ async function handleImport() {
         <div class="section-title">关于</div>
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">Simple Note</span>
+            <span class="setting-label">S-Note</span>
             <span class="setting-desc">v{{ version }}</span>
           </div>
         </div>
@@ -106,7 +106,7 @@ async function handleImport() {
         <div class="setting-row clickable" @click="toggleAutoStart">
           <div class="setting-info">
             <span class="setting-label">开机启动</span>
-            <span class="setting-desc">登录时自动启动 Simple Note</span>
+            <span class="setting-desc">登录时自动启动 S-Note</span>
           </div>
           <div class="toggle" :class="{ active: autoStart }">
             <div class="toggle-knob" />

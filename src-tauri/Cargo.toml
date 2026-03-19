@@ -1,5 +1,5 @@
 [package]
-name = "simple-note"
+name = "s-note"
 version = "0.1.0"
 description = "A macOS menu bar note-taking app"
 authors = ["you"]
