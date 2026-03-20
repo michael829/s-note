@@ -4,6 +4,7 @@ import type { Group } from "../composables/useApi";
 
 defineProps<{
   groups: Group[];
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -74,6 +75,7 @@ function cancelNewGroup() {
         type="text"
         placeholder="标题"
         class="form-title"
+        :disabled="disabled"
       />
       <div class="form-divider" />
       <textarea
@@ -81,12 +83,13 @@ function cancelNewGroup() {
         v-model="content"
         placeholder="写点什么..."
         class="form-content"
+        :disabled="disabled"
       />
     </div>
     <div class="form-footer">
       <div class="group-select-wrap">
         <span class="group-dot" />
-        <select class="group-native-select" @change="onGroupChange">
+        <select class="group-native-select" @change="onGroupChange" :disabled="disabled">
           <option value="">默认分组</option>
           <option v-for="group in groups" :key="group.id" :value="group.id">
             {{ group.name }}
@@ -96,7 +99,7 @@ function cancelNewGroup() {
       </div>
       <div class="form-actions">
         <span class="kbd">⌘↵</span>
-        <button class="btn-save" @click="save" :disabled="!name.trim() || !content.trim()">保存</button>
+        <button class="btn-save" @click="save" :disabled="disabled || !name.trim() || !content.trim()">保存</button>
       </div>
     </div>
 

@@ -2,82 +2,62 @@
 import { ref, onMounted } from "vue";
 import { useApi } from "./composables/useApi";
 import { useStore } from "./composables/useStore";
-import { save, open } from "@tauri-apps/plugin-dialog";
-import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { useAutoStart } from "./composables/useAutoStart";
+import { useDataTransfer } from "./composables/useDataTransfer";
+import { useErrorState } from "./composables/useErrorState";
+import ErrorBanner from "./components/ErrorBanner.vue";
 
 const api = useApi();
 const store = useStore();
+const autoStart = useAutoStart();
+const dataTransfer = useDataTransfer();
+const errors = useErrorState();
 
 const version = ref("");
-const autoStart = ref(false);
-const exporting = ref(false);
 const exportSuccess = ref(false);
-const importing = ref(false);
 const importSuccess = ref(false);
 
 onMounted(async () => {
   version.value = await api.getAppVersion();
-  try {
-    autoStart.value = await isEnabled();
-  } catch (_) {
-    autoStart.value = false;
-  }
+  await autoStart.load();
 });
 
 async function toggleAutoStart() {
   try {
-    if (autoStart.value) {
-      await disable();
-      autoStart.value = false;
-    } else {
-      await enable();
-      autoStart.value = true;
-    }
+    errors.clearError();
+    await autoStart.toggle();
   } catch (e) {
     console.error("Failed to toggle autostart:", e);
+    errors.setError(e, "切换开机启动失败");
   }
 }
 
 async function handleExport() {
   try {
-    exporting.value = true;
-    const data = await api.exportData();
-    const filePath = await save({
-      defaultPath: `s-note-export.json`,
-      filters: [{ name: "JSON", extensions: ["json"] }],
-    });
-    if (filePath) {
-      await api.saveToFile(filePath, data);
+    errors.clearError();
+    const done = await dataTransfer.exportData();
+    if (done) {
       exportSuccess.value = true;
       setTimeout(() => { exportSuccess.value = false; }, 2000);
     }
   } catch (e) {
     console.error("Export failed:", e);
-  } finally {
-    exporting.value = false;
+    errors.setError(e, "导出失败");
   }
 }
 
 async function handleImport() {
   try {
-    const filePath = await open({
-      multiple: false,
-      filters: [{ name: "JSON", extensions: ["json"] }],
-    });
-    
-    if (filePath) {
-      importing.value = true;
-      const content = await api.readFile(filePath as string);
-      await api.importData(content);
+    errors.clearError();
+    const done = await dataTransfer.importData();
+    if (done) {
       await store.loadData();
       importSuccess.value = true;
       setTimeout(() => { importSuccess.value = false; }, 2000);
     }
   } catch (e) {
     console.error("Import failed:", e);
-    alert("导入失败，请确保文件格式正确");
-  } finally {
-    importing.value = false;
+    errors.setError(e, "导入失败，请确保文件格式正确");
   }
 }
 </script>
@@ -89,6 +69,7 @@ async function handleImport() {
     </div>
 
     <div class="settings-body">
+      <ErrorBanner :message="errors.errorMessage.value" />
       <!-- App info -->
       <div class="section">
         <div class="section-title">关于</div>
@@ -108,7 +89,7 @@ async function handleImport() {
             <span class="setting-label">开机启动</span>
             <span class="setting-desc">登录时自动启动 S-Note</span>
           </div>
-          <div class="toggle" :class="{ active: autoStart }">
+          <div class="toggle" :class="{ active: autoStart.enabled.value }">
             <div class="toggle-knob" />
           </div>
         </div>
@@ -122,14 +103,14 @@ async function handleImport() {
             <span class="setting-label">导出数据</span>
             <span class="setting-desc">将所有笔记和分组导出为 JSON 文件</span>
           </div>
-          <button class="btn-action" @click="handleExport" :disabled="exporting">
+          <button class="btn-action" @click="handleExport" :disabled="dataTransfer.exporting.value">
             <template v-if="exportSuccess">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               已导出
             </template>
-            <template v-else-if="exporting">导出中...</template>
+            <template v-else-if="dataTransfer.exporting.value">导出中...</template>
             <template v-else>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -146,14 +127,14 @@ async function handleImport() {
             <span class="setting-label">导入数据</span>
             <span class="setting-desc">从 JSON 文件恢复笔记和分组</span>
           </div>
-          <button class="btn-action btn-secondary" @click="handleImport" :disabled="importing">
+          <button class="btn-action btn-secondary" @click="handleImport" :disabled="dataTransfer.importing.value">
             <template v-if="importSuccess">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               已导入
             </template>
-            <template v-else-if="importing">导入中...</template>
+            <template v-else-if="dataTransfer.importing.value">导入中...</template>
             <template v-else>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

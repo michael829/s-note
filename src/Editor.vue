@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useApi, type Group } from "./composables/useApi";
+import { useEditorSync } from "./composables/useEditorSync";
+import { useErrorState } from "./composables/useErrorState";
+import ErrorBanner from "./components/ErrorBanner.vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const api = useApi();
+const editorSync = useEditorSync();
+const errors = useErrorState();
 
 const params = new URLSearchParams(window.location.search);
 const editType = params.get("type") || "note";
@@ -23,8 +28,7 @@ onMounted(async () => {
   if (editType === "note") {
     groups.value = await api.getAllGroups();
     if (!isCreate) {
-      const notes = await api.getAllNotes();
-      const note = notes.find((n) => n.id === editId);
+      const note = await api.getNote(editId);
       if (note) {
         name.value = note.name;
         content.value = note.content;
@@ -32,9 +36,7 @@ onMounted(async () => {
       }
     }
   } else {
-    const allGroups = await api.getAllGroups();
-    groups.value = allGroups;
-    const group = allGroups.find((g) => g.id === editId);
+    const group = await api.getGroup(editId);
     if (group) {
       name.value = group.name;
     }
@@ -45,25 +47,26 @@ async function save() {
   const trimmedName = name.value.trim();
   if (!trimmedName) return;
 
-  if (editType === "note") {
-    const trimmedContent = content.value.trim();
-    if (!trimmedContent) return;
-    if (isCreate) {
-      await api.createNote(trimmedName, trimmedContent, groupId.value);
-    } else {
-      await api.updateNote(editId, trimmedName, trimmedContent, groupId.value);
-    }
-  } else {
-    await api.updateGroup(editId, trimmedName);
-  }
-
-  // Notify main window to reload data
   try {
-    const event = new CustomEvent("note-data-changed");
-    window.dispatchEvent(event);
-  } catch (_) {}
+    errors.clearError();
+    if (editType === "note") {
+      const trimmedContent = content.value.trim();
+      if (!trimmedContent) return;
+      if (isCreate) {
+        await api.createNote(trimmedName, trimmedContent, groupId.value);
+      } else {
+        await api.updateNote(editId, trimmedName, trimmedContent, groupId.value);
+      }
+    } else {
+      await api.updateGroup(editId, trimmedName);
+    }
 
-  await getCurrentWindow().close();
+    await editorSync.notifyDataChanged();
+
+    await getCurrentWindow().close();
+  } catch (error) {
+    errors.setError(error, "保存失败");
+  }
 }
 
 function cancel() {
@@ -71,12 +74,18 @@ function cancel() {
 }
 
 async function deleteItem() {
-  if (editType === "group") {
-    await api.deleteGroup(editId);
-  } else {
-    await api.deleteNote(editId);
+  try {
+    errors.clearError();
+    if (editType === "group") {
+      await api.deleteGroup(editId);
+    } else {
+      await api.deleteNote(editId);
+    }
+    await editorSync.notifyDataChanged();
+    await getCurrentWindow().close();
+  } catch (error) {
+    errors.setError(error, "删除失败");
   }
-  await getCurrentWindow().close();
 }
 
 function onGroupChange(e: Event) {
@@ -92,11 +101,14 @@ function onGroupChange(e: Event) {
 async function confirmNewGroup() {
   const trimmed = newGroupName.value.trim();
   if (trimmed) {
-    await api.createGroup(trimmed);
-    groups.value = await api.getAllGroups();
-    const newGroup = groups.value.find(g => g.name === trimmed);
-    if (newGroup) {
+    try {
+      errors.clearError();
+      const newGroup = await api.createGroup(trimmed);
+      groups.value = [...groups.value, newGroup];
       groupId.value = newGroup.id;
+      await editorSync.notifyDataChanged();
+    } catch (error) {
+      errors.setError(error, "创建分组失败");
     }
   }
   showNewGroupInput.value = false;
@@ -127,6 +139,8 @@ const titleText = isCreate
     <div class="editor-header">
       <h2 class="editor-title">{{ titleText }}</h2>
     </div>
+
+    <ErrorBanner :message="errors.errorMessage.value" />
 
     <div class="editor-form">
       <div class="field">

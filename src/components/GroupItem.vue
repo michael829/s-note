@@ -1,22 +1,45 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import type { Group, Note } from "../composables/useApi";
 import NoteItem from "./NoteItem.vue";
+import { useSortable } from "@dnd-kit/vue/sortable";
+import { DragDropProvider } from "@dnd-kit/vue";
 
-defineProps<{
+const props = defineProps<{
   group: Group;
+  index: number;
   notes: Note[];
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   editGroup: [group: Group];
   deleteGroup: [group: Group];
   copyNote: [note: Note];
   editNote: [note: Note];
   deleteNote: [note: Note];
+  reorderNotes: [groupId: number, event: any];
 }>();
 
 const expanded = ref(false);
+
+const groupNotesModel = computed(() => {
+  return props.notes;
+});
+
+function onNoteDragEnd(event: any) {
+  if (!event.operation) return;
+  emit("reorderNotes", props.group.id, event);
+}
+
+const element = ref<HTMLElement | null>(null);
+const handle = ref<HTMLElement | null>(null);
+
+const { isDragging } = useSortable({
+  id: computed(() => props.group.id),
+  index: computed(() => props.index),
+  element,
+  handle,
+});
 
 function toggle() {
   expanded.value = !expanded.value;
@@ -24,8 +47,24 @@ function toggle() {
 </script>
 
 <template>
-  <div class="group-item">
+  <div ref="element" class="group-item" :class="{ 'is-dragging': isDragging }">
     <div class="group-header" @click="toggle">
+      <!-- 拖拽手柄 -->
+      <div
+        ref="handle"
+        class="group-drag-handle"
+        title="拖动排序"
+        @click.stop
+      >
+        <svg style="pointer-events: none;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="5" r="1" />
+          <circle cx="9" cy="12" r="1" />
+          <circle cx="9" cy="19" r="1" />
+          <circle cx="15" cy="5" r="1" />
+          <circle cx="15" cy="12" r="1" />
+          <circle cx="15" cy="19" r="1" />
+        </svg>
+      </div>
       <div class="group-arrow" :class="{ open: expanded }">
         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
           <polyline points="9 18 15 12 9 6" />
@@ -33,7 +72,7 @@ function toggle() {
       </div>
       <span class="group-dot" />
       <span class="group-name">{{ group.name }}</span>
-      <span class="group-count">{{ notes.length }}</span>
+      <span class="group-count">{{ groupNotesModel.length }}</span>
       <div class="group-actions">
         <button class="act-btn" @click.stop="$emit('editGroup', group)" title="编辑" aria-label="编辑分组">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -52,15 +91,18 @@ function toggle() {
 
     <Transition name="slide">
       <div v-if="expanded" class="group-children">
-        <template v-if="notes.length > 0">
-          <NoteItem
-            v-for="note in notes"
-            :key="note.id"
-            :note="note"
-            @copy="$emit('copyNote', $event)"
-            @edit="$emit('editNote', $event)"
-            @delete="$emit('deleteNote', $event)"
-          />
+        <template v-if="groupNotesModel.length > 0">
+          <DragDropProvider @dragEnd="onNoteDragEnd">
+            <NoteItem
+              v-for="(note, noteIndex) in groupNotesModel"
+              :key="note.id"
+              :note="note"
+              :index="noteIndex"
+              @copy="$emit('copyNote', $event)"
+              @edit="$emit('editNote', $event)"
+              @delete="$emit('deleteNote', $event)"
+            />
+          </DragDropProvider>
         </template>
         <div v-else class="group-empty">暂无笔记</div>
       </div>
@@ -70,14 +112,14 @@ function toggle() {
 
 <style scoped>
 .group-item {
-  /* No extra margin/background — keep it clean */
 }
 
 .group-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px 4px;
+  padding: 8px 14px 4px 34px;
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast);
@@ -85,6 +127,34 @@ function toggle() {
 
 .group-header:hover {
   background: rgba(0, 0, 0, 0.015);
+}
+
+.group-drag-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.group-drag-handle:active {
+  cursor: grabbing;
+}
+
+.group-header:hover .group-drag-handle {
+  opacity: 0.5;
+}
+
+.group-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--color-text-secondary);
 }
 
 .group-arrow {
@@ -178,6 +248,13 @@ function toggle() {
   padding: 6px 14px 4px 34px;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.is-dragging {
+  opacity: 0.4 !important;
+  background: var(--color-surface-active) !important;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
 }
 
 /* Slide transition */

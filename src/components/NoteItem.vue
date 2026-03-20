@@ -1,7 +1,13 @@
 <script setup lang="ts">
+import { ref, computed } from "vue";
 import type { Note } from "../composables/useApi";
+import { useSortable } from "@dnd-kit/vue/sortable";
 
-defineProps<{ note: Note }>();
+const props = defineProps<{ 
+  note: Note;
+  index: number;
+}>();
+
 defineEmits<{
   copy: [note: Note];
   edit: [note: Note];
@@ -12,10 +18,35 @@ function truncate(text: string, max: number) {
   if (text.length <= max) return text;
   return text.slice(0, max) + "...";
 }
+
+const element = ref<HTMLElement | null>(null);
+const handle = ref<HTMLElement | null>(null);
+
+const { isDragging } = useSortable({
+  id: computed(() => props.note.id),
+  index: computed(() => props.index),
+  element,
+  handle,
+});
 </script>
 
 <template>
-  <div class="note-item">
+  <div ref="element" class="note-item" :class="{ 'is-dragging': isDragging }">
+    <!-- 手柄作为选择器 -->
+    <div
+      ref="handle"
+      class="drag-handle"
+      title="拖动排序"
+    >
+      <svg style="pointer-events: none;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="5" r="1" />
+        <circle cx="9" cy="12" r="1" />
+        <circle cx="9" cy="19" r="1" />
+        <circle cx="15" cy="5" r="1" />
+        <circle cx="15" cy="12" r="1" />
+        <circle cx="15" cy="19" r="1" />
+      </svg>
+    </div>
     <div class="note-body" @click="$emit('copy', note)" :title="`点击复制: ${note.content}`">
       <span class="note-title">{{ note.name }}</span>
       <span class="note-preview">{{ truncate(note.content, 30) }}</span>
@@ -39,11 +70,49 @@ function truncate(text: string, max: number) {
 
 <style scoped>
 .note-item {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 7px 14px 7px 34px;
   cursor: pointer;
   transition: background var(--transition-fast);
+  user-select: none;
+  background: var(--color-bg);
+}
+
+.is-dragging {
+  opacity: 0.4 !important;
+  background: var(--color-surface-active) !important;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+}
+
+.drag-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.note-item:hover .drag-handle {
+  opacity: 0.5;
+}
+
+.drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--color-text-secondary);
 }
 
 .note-item:hover {
